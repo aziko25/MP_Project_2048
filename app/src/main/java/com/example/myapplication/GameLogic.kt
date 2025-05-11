@@ -86,3 +86,127 @@ fun spawnRandomTile(board: List<List<Int>>): List<List<Int>> {
         row.mapIndexed { j, v -> if (i == r && j == c) newValue else v }
     }
 }
+
+
+fun getPossibleMoves(board: List<List<Int>>): List<Direction> {
+    return Direction.entries.filter { direction ->
+        moveBoard(board, direction).first != board
+    }
+}
+
+fun getBestMove(board: List<List<Int>>): Direction? {
+    val depth = getAdaptiveDepth(board)
+    return getPossibleMoves(board)
+        .map { move ->
+            val (newBoard, _) = moveBoard(board, move)
+            val eval = expectimax(newBoard, depth - 1, isPlayer = false)
+            move to eval
+        }
+        .maxByOrNull { it.second }
+        ?.first
+}
+
+fun getAdaptiveDepth(board: List<List<Int>>): Int {
+    val empty = board.flatten().count { it == 0 }
+    return when {
+        empty >= 6 -> 4
+        empty >= 3 -> 5
+        else -> 6
+    }
+}
+
+fun expectimax(board: List<List<Int>>, depth: Int, isPlayer: Boolean): Double {
+    if (depth == 0 || isGameOver(board)) {
+        return evaluateBoard(board, 0).toDouble()
+    }
+
+    return if (isPlayer) {
+        getPossibleMoves(board)
+            .map { moveBoard(board, it) }
+            .maxOfOrNull { (newBoard, _) ->
+                expectimax(newBoard, depth - 1, isPlayer = false)
+            } ?: evaluateBoard(board, 0).toDouble()
+    } else {
+        val emptyTiles = mutableListOf<Pair<Int, Int>>()
+        for (i in board.indices) {
+            for (j in board[i].indices) {
+                if (board[i][j] == 0) emptyTiles.add(i to j)
+            }
+        }
+
+        if (emptyTiles.isEmpty()) return evaluateBoard(board, 0).toDouble()
+
+        var total = 0.0
+        for ((i, j) in emptyTiles) {
+            val with2 = board.deepCopy().apply { this[i][j] = 2 }
+            val with4 = board.deepCopy().apply { this[i][j] = 4 }
+
+            total += 0.9 * expectimax(with2, depth - 1, isPlayer = true)
+            total += 0.1 * expectimax(with4, depth - 1, isPlayer = true)
+        }
+
+        return total / emptyTiles.size
+    }
+}
+
+fun evaluateBoard(board: List<List<Int>>, score: Int): Int {
+    val emptyTiles = board.flatten().count { it == 0 }
+    val maxTile = board.flatten().maxOrNull() ?: 0
+    val smoothness = calculateSmoothness(board)
+    val monotonicity = calculateMonotonicity(board)
+    val cornerBonus = if (isMaxTileInCorner(board)) 10000 else 0
+
+    return score +
+            (emptyTiles * 270) +
+            (smoothness * 0.5).toInt() +
+            (monotonicity * 100) +
+            (maxTile * 10) +
+            cornerBonus
+}
+
+fun calculateSmoothness(board: List<List<Int>>): Int {
+    var smoothness = 0
+    for (i in board.indices) {
+        for (j in board[i].indices) {
+            val value = board[i][j]
+            if (value == 0) continue
+            if (j + 1 < board[i].size && board[i][j + 1] != 0) {
+                smoothness -= abs(value - board[i][j + 1])
+            }
+            if (i + 1 < board.size && board[i + 1][j] != 0) {
+                smoothness -= abs(value - board[i + 1][j])
+            }
+        }
+    }
+    return smoothness
+}
+
+fun calculateMonotonicity(board: List<List<Int>>): Int {
+    var score = 0
+
+    for (row in board) {
+        for (i in 1 until row.size) {
+            score += if (row[i - 1] >= row[i]) 1 else -1
+        }
+    }
+
+    for (j in board[0].indices) {
+        for (i in 1 until board.size) {
+            score += if (board[i - 1][j] >= board[i][j]) 1 else -1
+        }
+    }
+
+    return score
+}
+
+fun isMaxTileInCorner(board: List<List<Int>>): Boolean {
+    val max = board.flatten().maxOrNull() ?: return false
+    val corners = listOf(
+        board[0][0], board[0][board.lastIndex],
+        board[board.lastIndex][0], board[board.lastIndex][board.lastIndex]
+    )
+    return max in corners
+}
+
+fun List<List<Int>>.deepCopy(): List<MutableList<Int>> =
+    map { it.toMutableList() }

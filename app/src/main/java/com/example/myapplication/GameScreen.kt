@@ -1,10 +1,10 @@
 package com.example.myapplication
 
 // CameraX + ML Kit
+import android.widget.Toast
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.forEachGesture
@@ -32,76 +32,71 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 
 @Composable
 fun Game2048Screen() {
+
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Game state management
     var score by remember { mutableIntStateOf(0) }
     var bestScore by remember { mutableIntStateOf(0) }
     var board by remember { mutableStateOf(generateInitialBoard()) }
     var isGameOver by remember { mutableStateOf(false) }
+    var showCongrats by remember { mutableStateOf(false) }
+    var hasShownCongrats by remember { mutableStateOf(false) }
 
-    // Face detector instance
-    val faceDetector = remember {
-        FaceDetector(context, lifecycleOwner) { direction ->
-            if (!isGameOver) {
-                val gameDirection = when (direction) {
-                    Direction.LEFT -> Direction.LEFT
-                    Direction.RIGHT -> Direction.RIGHT
-                    Direction.UP -> Direction.UP
-                    Direction.DOWN -> Direction.DOWN
-                }
+    val autoPlayHintMove = true
+    val autoMovesQuantity = 10
 
-                val (newBoard, gained) = moveBoard(board, gameDirection)
-                if (newBoard != board) {
-                    board = newBoard
-                    score += gained
-                    if (score > bestScore) bestScore = score
-                    if (isGameOver(board)) isGameOver = true
-                }
+    fun handleMove(direction: Direction) {
+        val (newBoard, gained) = moveBoard(board, direction)
+        if (newBoard != board) {
+            board = newBoard
+            score += gained
+            if (score > bestScore) bestScore = score
+            if (isGameOver(board)) isGameOver = true
+
+            // Check max tile from current board
+            val maxTile = board.flatten().maxOrNull() ?: 0
+            if (maxTile >= 64 && !hasShownCongrats) {
+                showCongrats = true
+                hasShownCongrats = true
             }
         }
     }
 
-    // Cleanup on dispose
-    DisposableEffect(Unit) {
-        onDispose {
-            faceDetector.stop()
-        }
-    }
-
-    // Restart function
     fun restartGame() {
         if (score > bestScore) bestScore = score
         score = 0
         board = generateInitialBoard()
         isGameOver = false
+        showCongrats = false
+        hasShownCongrats = false
     }
 
-    // Gesture-based swiping
+    // Face direction to move
+    val faceDetector = remember {
+        FaceDetector(context, lifecycleOwner) { direction ->
+            if (!isGameOver) handleMove(direction)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { faceDetector.stop() }
+    }
+
+    // Swipe gesture modifier
     val gestureModifier = Modifier.pointerInput(Unit) {
         forEachGesture {
             awaitPointerEventScope {
                 val down = awaitFirstDown()
-                var handled = false
-
                 awaitTouchSlopOrCancellation(down.id) { change, over ->
-                    if (!handled && !isGameOver) {
-                        val (x, y) = over
-                        val dir = getDirectionFromOffset(x, y)
-                        dir?.let {
-                            val (newBoard, gained) = moveBoard(board, it)
-                            if (newBoard != board) {
-                                board = newBoard
-                                score += gained
-                                if (score > bestScore) bestScore = score
-                                if (isGameOver(board)) isGameOver = true
-                            }
-                            handled = true
-                        }
+                    val direction = getDirectionFromOffset(over.x, over.y)
+                    if (!isGameOver && direction != null) {
+                        handleMove(direction)
                         change.consume()
                     }
                 }
@@ -109,10 +104,9 @@ fun Game2048Screen() {
         }
     }
 
-    // Main layout
     Box(modifier = Modifier.fillMaxSize().background(Color(0xFFFAF8EF))) {
 
-        // PreviewView for Face Detection
+        // Face camera preview
         AndroidView(
             factory = { ctx ->
                 PreviewView(ctx).apply {
@@ -128,25 +122,48 @@ fun Game2048Screen() {
                 .border(2.dp, Color.White.copy(alpha = 0.6f))
         )
 
+        // Header + Hint Button
         Column(
-            modifier = Modifier.align(Alignment.TopCenter)
+            modifier = Modifier
+                .align(Alignment.TopCenter)
                 .padding(top = 160.dp, start = 16.dp, end = 16.dp)
         ) {
-            Header(score, bestScore, onRestart = { restartGame() })
+            Header(
+                score = score,
+                bestScore = bestScore,
+                onRestart = { restartGame() },
+                onHint = {
+                    repeat(autoMovesQuantity) {
+                        val bestMove = getBestMove(board)
+                        if (bestMove != null) {
+                            if (autoPlayHintMove) {
+                                handleMove(bestMove)
+                            } else {
+                                Toast.makeText(context, "Try moving ${bestMove.name}", Toast.LENGTH_SHORT).show()
+                                return@Header
+                            }
+                        } else {
+                            Toast.makeText(context, "No valid moves left", Toast.LENGTH_SHORT).show()
+                            return@Header
+                        }
+                    }
+                }
+            )
         }
 
+        // Board with gesture input
         Column(
-            modifier = Modifier.align(Alignment.Center)
+            modifier = Modifier
+                .align(Alignment.Center)
                 .then(gestureModifier)
         ) {
             Board(board)
         }
 
+        // Game over overlay
         if (isGameOver) {
             Box(
-                modifier = Modifier.fillMaxSize()
-                    .background(Color(0xAA000000))
-                    .clickable(enabled = false) {},
+                modifier = Modifier.fillMaxSize().background(Color(0xAA000000)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -155,6 +172,19 @@ fun Game2048Screen() {
                     ActionButton("RESTART", onClick = { restartGame() })
                 }
             }
+        }
+
+        if (showCongrats) {
+            AlertDialog(
+                onDismissRequest = { showCongrats = false },
+                title = { Text("🎉 Congratulations!") },
+                text = { Text("You reached 2048!") },
+                confirmButton = {
+                    TextButton(onClick = { showCongrats = false }) {
+                        Text("Keep Playing")
+                    }
+                }
+            )
         }
     }
 }

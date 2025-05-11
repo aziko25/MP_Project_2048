@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 
 @Composable
 fun Board(board: List<List<Int>>) {
+
     val cellSize = 70.dp
     val spacing = 8.dp
 

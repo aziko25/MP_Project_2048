@@ -14,13 +14,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.RoundedCornerShape
 
 @Composable
-fun Header(score: Int, bestScore: Int, onRestart: () -> Unit) {
+fun Header(score: Int, bestScore: Int, onRestart: () -> Unit, onHint: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Box(
-            modifier = Modifier.size(110.dp).background(Color(0xFFEDC403), RoundedCornerShape(8.dp)),
+            modifier = Modifier.size(110.dp)
+                .background(Color(0xFFEDC403), RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center
         ) {
             Text("2048", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
@@ -32,7 +33,11 @@ fun Header(score: Int, bestScore: Int, onRestart: () -> Unit) {
                 Spacer(modifier = Modifier.height(6.dp))
                 ActionButton("RESTART", onRestart)
             }
-            ScoreBox("BEST", bestScore)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                ScoreBox("BEST", bestScore)
+                Spacer(modifier = Modifier.height(6.dp))
+                ActionButton("HINT", onHint)
+            }
         }
     }
 }
