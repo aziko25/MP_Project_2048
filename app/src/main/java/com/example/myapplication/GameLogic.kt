@@ -88,6 +88,8 @@ fun spawnRandomTile(board: List<List<Int>>): List<List<Int>> {
 }
 
 
+// HINT ALGORITHM
+
 fun getPossibleMoves(board: List<List<Int>>): List<Direction> {
     return Direction.entries.filter { direction ->
         moveBoard(board, direction).first != board

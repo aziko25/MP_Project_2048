@@ -61,7 +61,7 @@ fun Game2048Screen() {
 
             // Check max tile from current board
             val maxTile = board.flatten().maxOrNull() ?: 0
-            if (maxTile >= 64 && !hasShownCongrats) {
+            if (maxTile >= 2048 && !hasShownCongrats) {
                 showCongrats = true
                 hasShownCongrats = true
             }
